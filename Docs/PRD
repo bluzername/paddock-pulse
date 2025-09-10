@@ -1,0 +1,219 @@
+# Product Requirements Document (PRD)
+
+## Product Name: F1 FlashPoint
+
+### Overview
+
+F1 FlashPoint is a Formula 1 insights-driven content engine that produces scroll-stopping Instagram post and video scripts designed to captivate new F1 fans. It merges high-fidelity analytics powered by FastF1 data and world-class AI-driven commentary with a copywriting engine that emulates viral creators (e.g., @wtf1official). It also automates visual content creation and posting via Instagram's API. The entire system will be deployed on Render with strict budget and security constraints.
+
+---
+
+## Goal
+
+To automate the creation of emotionally engaging, story-driven Instagram post scripts (both caption and video formats) based on recent Formula 1 events and historical context. These scripts will be:
+
+- Attention-grabbing within the first 2 seconds
+- Designed for new F1 fans
+- Emotionally resonant, curiosity-provoking, and algorithm-optimized
+- Automatically paired with compelling media assets and published for maximum exposure
+
+---
+
+## Functional Components
+
+### 1. **Analytics System ("The Analyst")**
+
+#### Role
+
+Act as a virtual F1 commentator capable of:
+
+- Parsing recent race data via the FastF1 API
+- Comparing with historical race patterns
+- Detecting rivalries, drama, milestones, and statistical anomalies
+- Synthesizing storylines based on trends and turning points
+
+#### Sources
+
+- [FastF1 API](https://github.com/theOehrly/Fast-F1)
+- Internal caching system for historical data comparisons (last 2 seasons minimum)
+
+#### Key Outputs
+
+- Bullet-pointed insights tagged with emotional relevance
+- Suggested narrative arcs: comeback stories, controversial moments, dramatic changes, underdog wins
+
+---
+
+### 2. **Composer Engine ("The Copywriter")**
+
+#### Role
+
+Transform insights into platform-optimized post/video scripts using LLMs (e.g., Sonnet3.7, GPT-4, Claude).
+
+#### Output Formats
+
+- Instagram Post Caption (text-only)
+- Instagram Video Script (with caption timing/speaker lines)
+
+#### Script Requirements
+
+- Max Duration: 30 seconds
+- Format: Punchy, 1-2 line sentences, emoji + hashtag optimized
+- Hook: Must appear within first 2 lines/2 seconds
+- Tone: Curious, dramatic, beginner-accessible
+- CTA: Always includes a call-to-action (e.g., “Drop your hot take below 💥")
+- Examples match @wtf1official or @f1dataanalysis styles
+
+#### Output Example (Video Script)
+
+```
+[SPEAKER 1 - Caption: "Red Bull just got EXPOSED 😳"]
+"Everyone thought Max had it in the bag."
+
+[SPEAKER 2 - Caption: "But lap 43 changed EVERYTHING."]
+"Until one bold move flipped the race."
+
+[SPEAKER 1 - Caption: "The comeback story no one saw coming 🚀"]
+"Is this the new title fight? Or just a fluke?"
+
+[CTA Slide: "Drop your prediction for the next GP 💥 #F1 #Formula1 #F1Drama"]
+```
+
+---
+
+### 3. **Post Generator ("The Visualizer")**
+
+#### Role
+
+Pair scripts with engaging, high-impact media:
+
+- Use royalty-free content scraped from verified public domains
+- Generate images and video segments using APIs from OpenAI, Stability AI, RunwayML, etc.
+- Add overlays and transitions for reel-style output
+- Format according to Instagram specs (Reels/Stories/Posts)
+
+#### Output Requirements
+
+- Resolution and aspect-ratio suitable for IG Reels and Posts
+- Brand-safe, F1-themed templates
+- Text overlays matching script lines
+- Compressed MP4 for upload
+
+#### Content Sources
+
+- Unsplash, Pexels (scraped)
+- AI-generated imagery using latest APIs
+- Internal clip library from previous posts
+
+---
+
+### 4. Poster Module ("The Publisher")
+
+#### Role
+
+Automate secure posting to Instagram via Facebook Graph API
+
+#### Features
+
+- Uses Instagram Content Publishing API ([link](https://developers.facebook.com/docs/instagram-platform/instagram-api-with-facebook-login/content-publishing/?utm_source=chatgpt.com))
+- Access tokens securely stored and rotated
+- Auto-schedules posts for optimal timing
+- Adds pre-defined hashtags, location tags, and @mentions
+- Logs status of each post with fallback notification on failure
+
+#### Exposure Optimization Techniques
+
+- Smart posting windows (based on prior engagement)
+- Caption-first vs. media-first testing
+- Engagement bait CTA + pinned comment trick
+- Alt-text for accessibility and ranking
+
+---
+
+## System Architecture
+
+### Overview
+
+- **Backend**: Python
+- **Data**: FastF1 API, JSON cache storage (Render-hosted persistent volume)
+- **LLMs**: OpenRouter / Claude / Sonnet3.7 via API
+- **Media Generation**: OpenAI Image APIs, RunwayML, Stable Diffusion
+- **Deployment**: Render.com (autoscaling enabled)
+
+### Data Flow
+
+1. **Scheduler** (daily cron or post-race trigger)
+2. **Data Fetcher** uses FastF1 to get latest session data
+3. **Insight Synthesizer** processes race events and generates storylines
+4. **Composer** formats and generates post/video scripts
+5. **Post Generator** builds image/video using external media + AI
+6. **Poster** uploads via Instagram Graph API with metadata
+7. **Exporter** sends script + media + status logs to audit store
+
+---
+
+## Security Considerations
+
+- **API keys encrypted at rest and rotated weekly**
+- **OAuth2 tokens for IG API stored securely, with refresh fallback**
+- **Rate limiting and auth controls** to prevent misuse of FastF1 and AI APIs
+- **Render deployment** includes firewall and isolated environments
+- **No PII or user data stored**, ensuring low attack surface
+- **Error monitoring/log sanitization** for auditability
+- **Media sources verified for royalty-free compliance**
+
+---
+
+## Cost Constraints
+
+- **Hosting (Render)**: \$1.50/day (autoscaled instance with volume)
+- **AI API Calls**: Max \$3/day, including image/video generation
+- **FastF1 usage**: Free, with internal throttling
+- **Instagram API**: Free tier usage
+- **Total Cost Ceiling**: \$5/day
+
+### Optimization Tactics
+
+- Precompute historical stats
+- Limit post-generation to 1–2/day
+- Use compressed insight cache for LLM context windows
+- Batch media generation and reuse static assets when appropriate
+
+---
+
+## KPIs / Success Metrics
+
+- Engagement rate on generated posts (likes/comments/shares/save ratio)
+- Time-to-publish after race (target: < 60 min)
+- Cost per post generated (target: <\$0.20)
+- Retention of user interest across races (measured via audience feedback)
+- Media performance score (CTR, Watch Duration)
+
+---
+
+## Future Roadmap
+
+- Multilingual support (Spanish, Thai, Portuguese)
+- YouTube Shorts and TikTok integration
+- User input loop: fans suggest stories/angles to prioritize
+- Real-time race companion mode
+- AI voiceovers with TTS models for Reels
+
+---
+
+## Owners
+
+- **Product**: Evy
+- **Engineering Lead**: TBD
+- **Copy Style Curator**: TBD (inspired by @wtf1official)
+- **Media Sourcing & Rights Compliance**: TBD
+- **Deployment and Security**: TBD
+
+---
+
+## Notes
+
+- First focus: post-race drama narratives (e.g., strategy mistakes, overtakes, rivalries)
+- Validate copy and media quality with actual F1 fans before scale
+- Consider fine-tuning LLM on race commentary for tighter phrasing in future iterations
+

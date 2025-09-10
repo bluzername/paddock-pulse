@@ -1,0 +1,110 @@
+# F1 FlashPoint – Implementation Plan
+
+This document outlines the end-to-end software engineering plan for building the F1 FlashPoint app. It includes over 50 detailed implementation steps covering architecture, API design, dashboard integration, hosting, security, testing, and long-term maintenance. All steps follow principles of modularity, simplicity, and alignment with the core documents (PRD, App Flow, Tech Stack, Cursor Rules).
+
+---
+
+## 1. 📦 Project Setup & Scaffolding
+1.1 Create monorepo with `backend/`, `scripts/`, `media/`, `dashboard/`, `tests/`
+1.2 Initialize Git and link to GitHub repo
+1.3 Set up `pyproject.toml` using Poetry (preferred) or `requirements.txt`
+1.4 Configure pre-commit hooks (black, isort, flake8)
+1.5 Set up `.env` structure and secrets template
+
+---
+
+## 2. 🧠 Core Backend Architecture
+2.1 Create FastAPI server entrypoint in `main.py`
+2.2 Structure app modules: `fetcher`, `insight_engine`, `composer`, `media_gen`, `poster`, `scheduler`, `admin_ui`
+2.3 Add FastAPI routers for each module
+2.4 Set up Jinja2 templating for dashboard
+2.5 Add global config manager using Pydantic
+
+---
+
+## 3. 🔍 FastF1 Data Fetcher
+3.1 Integrate FastF1 API and retrieve session metadata
+3.2 Implement lap-by-lap and telemetry fetch
+3.3 Normalize and cache output as JSON in `/data/`
+3.4 Add dynamic race detection (last event + last updated)
+
+---
+
+## 4. 🧠 Insight Engine (Analyst)
+4.1 Write comparator functions for historical vs. recent data
+4.2 Extract storyline-worthy anomalies, rivalries, drama
+4.3 Output tagged insight JSON bundle per race
+4.4 Implement emotional tagging heuristics
+
+---
+
+## 5. ✍️ Script Composer (Copywriter)
+5.1 Define prompt templates for LLM usage
+5.2 Connect to OpenRouter API
+5.3 Generate post caption + short video script
+5.4 Format for Instagram (1–2 line sentences, CTA)
+5.5 Return Markdown + JSON variant of each script
+
+---
+
+## 6. 🎥 Media Generator (Visualizer)
+6.1 Create base template for video composition
+6.2 Scrape royalty-free assets from Pexels/Unsplash
+6.3 Integrate OpenAI + Stability APIs for AI image/video
+6.4 Overlay captions and speaker lines using MoviePy
+6.5 Assemble and compress video with FFmpeg
+6.6 Persist generated assets to `/media/` directory before posting
+6.7 Ensure video captions are time-synced to LLM-generated timestamps
+6.6 Persist generated assets to `/media/` directory before posting
+6.7 Ensure video captions are time-synced to LLM-generated timestamps
+
+---
+
+## 7. 📲 Instagram Publisher (Poster)
+7.1 Set up Facebook Graph API access and token management
+7.2 Create post endpoint: Reel with caption + metadata
+7.3 Implement smart schedule for optimal IG timing
+7.4 Add posting log + retry fallback
+7.5 Handle alt-text and hashtag optimization
+
+---
+
+## 8. 🖥️ Admin Dashboard
+8.1 Build web-based UI using FastAPI + Jinja2
+8.2 Add authentication for admin-only access
+8.3 Show preview of script + media
+8.4 Manual trigger, approve, delete buttons
+8.5 Include error logs, budget meter, media reuse stats
+8.6 Display daily API budget tracking with real-time usage
+8.7 Trigger email alert if daily cost exceeds $5 limit
+8.6 Display daily API budget tracking with real-time usage
+8.7 Trigger email alert if daily cost exceeds $5 limit
+
+---
+
+## 9. ☁️ Hosting & Deployment
+9.1 Use Render.com for backend and dashboard
+9.2 Add Dockerfile for deployment
+9.3 Configure autoscaling and health checks
+9.4 Set up Render secrets manager
+9.5 Add deploy script via GitHub Actions
+
+---
+
+## 10. 🔐 Security Measures
+10.1 Rotate API keys weekly via Render
+10.2 Sanitize logs and protect tokens
+10.3 Enforce OAuth2 for dashboard login
+10.4 Add rate-limiting and failure alerts
+10.5 No persistent user data stored
+
+---
+
+## 11. 📈 Monitoring & Maintenance
+11.1 Integrate basic uptime monitoring
+11.2 Add logging via Loguru with alert hooks
+11.3 Build retry mechanism for failed steps
+11.4 Track API usage and cost thresholds with per-request metering and daily aggregation
+11.5 Raise email alert if $5 daily cap exceeded
+11.6 Define manual override tools in dashboard
+

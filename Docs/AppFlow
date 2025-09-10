@@ -1,0 +1,141 @@
+# F1 FlashPoint – App Flow Document
+
+## Overview
+This document outlines the end-to-end operational flow of the F1 FlashPoint app as specified in the PRD. The flow is designed to be modular, cost-efficient, and optimized for both content quality and system reliability. The app integrates automated data analysis, script generation, media creation, and social posting for Formula 1 content targeted at new fans.
+
+---
+
+## Admin Dashboard (Web-Based)
+### Purpose:
+A lightweight, secure web interface to provide observability, manual override, and content preview across the app lifecycle.
+
+### Core Features:
+- Manual trigger for pipeline execution
+- Preview of generated scripts and media
+- Post queue management (approve/edit/delete)
+- Cost dashboard and usage monitoring
+- Error log viewer and retry option
+- OAuth2-secured admin access only
+
+---
+
+## 1. Trigger Layer
+### Event Triggers:
+- **Scheduled Run:** Daily cron job or race-specific trigger (e.g. 60 minutes post-race)
+- **Manual Trigger:** Admin dashboard button (future support)
+
+---
+
+## 2. Data Layer
+### FastF1 Data Fetcher:
+- Retrieves latest session data (race, qualifying, practice)
+- Caches results locally (e.g., last 2 seasons)
+- Emits: Cleaned JSON of relevant race data
+
+---
+
+## 3. Insight Engine (The Analyst)
+### Logic:
+- Analyze race trends, drama, rivalries, anomalies
+- Compare with historical race data
+- Extract emotion-driven insights
+
+### Output:
+```json
+{
+  "narrative_tags": ["comeback", "controversy", "underdog"],
+  "key_moments": ["lap43_overtake", "pit_mistake"],
+  "hero_driver": "Lando Norris",
+  "emotional_tone": "surprise + excitement",
+  "insight_bullets": [
+    "Lando gained 3 positions in 5 laps post-pit.",
+    "Ferrari’s double-stack gamble backfired again."
+  ]
+}
+```
+
+---
+
+## 4. Copy Generator (The Composer)
+### Input:
+- Insight JSON from Analyst
+
+### Process:
+- Use LLM (e.g. Sonnet3.7) prompt template
+- Inject narrative tags and emotional tone
+
+### Output:
+- Instagram post caption (text)
+- Instagram video script (timed speaker lines or captions)
+
+---
+
+## 5. Media Generator (The Visualizer)
+### Input:
+- Script + tagged content moments (e.g. lap43_overtake)
+
+### Sources:
+- AI-generated visuals (OpenAI, Stability AI)
+- Royalty-free scraped media (Unsplash, Pexels)
+- Prebuilt overlay templates
+
+### Output:
+- Final MP4 asset (vertical, IG-optimized)
+- Thumbnail image + alt-text
+- Hashtag set (based on topic, drivers, events)
+- Metadata (location tags, alt-text, posting time window)
+
+---
+
+## 6. IG Publisher (The Poster)
+### Input:
+- Video asset
+- Caption
+- Hashtags, alt-text, metadata
+
+### Actions:
+- Auth via Instagram Graph API
+- Post media to IG account (Reel or Story)
+- Log success or failure with status + timestamp
+
+### Optimizations:
+- Smart post timing
+- CTA pinning
+- Engagement hashtag set
+
+---
+
+## 7. Logging & Monitoring
+- Execution logs for each module
+- Errors forwarded to admin channel
+- Media reuse tracking
+
+---
+
+## 8. Budget Control
+- Each stage measures API cost
+- Hard cap at $5/day
+- Fallback to template reuse if budget exceeded
+
+---
+
+## 9. Future Flow Enhancements
+- Add multilingual script branches
+- Generate YouTube Shorts & TikTok in parallel
+- Allow fan-submitted prompt injection via UI
+
+---
+
+## Flow Summary (Visual)
+```
+[TRIGGER] → [FETCH DATA] → [ANALYZE] → [SCRIPT] → [MEDIA GEN] → [POST] → [LOG]
+```
+
+---
+
+## Ownership
+- Product Flow Owner: Evy
+- Engineering: TBD
+- Deployment: Render Autoscaled Node
+- IG Key Admin: TBD
+

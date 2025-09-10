@@ -1,0 +1,965 @@
+"""
+Image Generator Module
+
+This module is responsible for generating images using OpenAI's DALL-E model
+based on prompts created for Formula 1 posts.
+
+It also supports:
+- Midjourney image generation via GoAPI
+- Google's Gemini API for text descriptions (Note: Current version of the Google 
+  Generative AI SDK doesn't support direct image generation. For actual image 
+  generation with Google, consider using the Vertex AI API:
+  https://cloud.google.com/vertex-ai/docs/generative-ai/image/generate-images)
+"""
+
+import os
+import re
+import logging
+import json
+import base64
+from pathlib import Path
+import requests
+from urllib.parse import quote_plus
+from openai import OpenAI
+import httpx
+import colorama
+from colorama import Fore, Style
+
+# Add Google AI library for Imagen
+import google.generativeai as genai
+
+# Initialize colorama for colored terminal output
+colorama.init(autoreset=True)
+
+# Custom ColoredFormatter for logging
+class ColoredFormatter(logging.Formatter):
+    """Custom formatter to add colors to log messages based on level."""
+    
+    FORMATS = {
+        logging.DEBUG: Style.DIM + "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        logging.INFO: "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        logging.WARNING: Fore.YELLOW + "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        logging.ERROR: Fore.RED + "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+        logging.CRITICAL: Fore.RED + Style.BRIGHT + "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    }
+    
+    def format(self, record):
+        log_fmt = self.FORMATS.get(record.levelno)
+        formatter = logging.Formatter(log_fmt)
+        return formatter.format(record)
+
+# Set up logging with colored output
+handler = logging.StreamHandler()
+handler.setFormatter(ColoredFormatter())
+logging.basicConfig(
+    level=logging.INFO,
+    handlers=[handler]
+)
+logger = logging.getLogger("image_generator")
+
+def validate_api_key(api_key, provider="openai"):
+    """
+    Validate that an API key is not a placeholder.
+    
+    Args:
+        api_key: API key to validate
+        provider: The API provider (openai, goapi, google, or hiveai)
+        
+    Returns:
+        tuple: (is_valid, message) where is_valid is a boolean and message is a string
+    """
+    if not api_key:
+        return False, "API key is empty or None"
+    
+    # Check if key is a placeholder
+    placeholder_patterns = [
+        "your", "api", "key", "openai", "sk-your", "example", "place", "holder",
+        "demo", "test", "change", "replace"
+    ]
+    
+    for pattern in placeholder_patterns:
+        if pattern.lower() in api_key.lower():
+            return False, f"API key appears to be a placeholder (contains '{pattern}')"
+    
+    # Provider-specific validation
+    if provider == "openai":
+        # Check for proper format
+        if not api_key.startswith("sk-"):
+            return False, "OpenAI API key should start with 'sk-'"
+        
+        # Check reasonable length
+        if len(api_key) < 20:
+            return False, "API key is too short"
+    elif provider == "google":
+        # Check for proper format for Google API keys
+        if not api_key.startswith("AIza"):
+            return False, "Google API key should start with 'AIza'"
+        
+        # Check reasonable length
+        if len(api_key) < 30:
+            return False, "Google API key is too short"
+    elif provider == "hiveai":
+        # HiveAI keys are typically alphanumeric
+        if len(api_key) < 20:
+            return False, "HiveAI API key appears to be too short"
+    
+    return True, "API key appears valid"
+
+class ImageGenerator:
+    """
+    Class to generate images using OpenAI's DALL-E model, Midjourney via GoAPI, 
+    Google's Imagen, or HiveAI for F1 social media posts.
+    """
+    
+    def __init__(self, api_key, output_dir='output', model="flux-schnell-enhanced", size="768x1344", 
+                 provider="hiveai", goapi_key=None, google_key=None, hiveai_key=None, aspect_ratio="1:1", num_images=2):
+        """
+        Initialize the ImageGenerator.
+        
+        Args:
+            api_key: OpenAI API key (used if provider is 'openai')
+            output_dir: Directory where images will be stored
+            model: Model to use (default: 'flux-schnell-enhanced' for HiveAI)
+            size: Image size to generate (default: 768x1344 for HiveAI)
+            provider: Image generation provider ('openai', 'midjourney', 'imagen', or 'hiveai')
+            goapi_key: GoAPI API key (used if provider is 'midjourney')
+            google_key: Google API key (used if provider is 'imagen')
+            hiveai_key: HiveAI API key (used if provider is 'hiveai')
+            aspect_ratio: Aspect ratio for images (default: "1:1", other options: "16:9", "4:3", etc.)
+            num_images: Number of images to generate per prompt (default: 2)
+        """
+        self.output_dir = output_dir
+        self.provider = provider.lower()
+        self.goapi_key = goapi_key
+        self.google_key = google_key
+        self.hiveai_key = hiveai_key or "GUW7pxBW503hGHTsAD3yyypkNB4zxPhn"  # Use default HiveAI key if not provided
+        self.aspect_ratio = aspect_ratio
+        self.num_images = num_images
+        
+        os.makedirs(output_dir, exist_ok=True)
+        
+        if self.provider == "openai":
+            # Validate API key
+            is_valid, message = validate_api_key(api_key, "openai")
+            if not is_valid:
+                logger.error(f"Invalid API key: {message}")
+                logger.error(f"API key starts with: '{api_key[:10]}...'")
+                raise ValueError(f"Invalid OpenAI API key: {message}")
+            
+            logger.info(f"API key validation passed: {message}")
+            
+            # Create custom HTTP client without proxies
+            http_client = httpx.Client(timeout=60.0)
+            
+            # Create OpenAI client with custom HTTP client
+            try:
+                # Double-check that the API key is set properly before creating the client
+                logger.debug(f"API key type: {type(api_key)}")
+                logger.debug(f"API key length: {len(api_key)}")
+                logger.debug(f"API key prefix: {api_key[:4]}...")
+                
+                self.client = OpenAI(
+                    api_key=api_key,
+                    http_client=http_client
+                )
+                logger.info("Successfully initialized OpenAI client")
+            except Exception as e:
+                logger.error(f"Failed to initialize OpenAI client: {str(e)}")
+                logger.error(f"API key prefix: {api_key[:4]}...")
+                raise
+            
+            self.model = model
+            self.size = size
+            
+            # Check if API key is valid
+            if not api_key:
+                logger.error("No OpenAI API key provided. Image generation will fail.")
+                
+        elif self.provider == "midjourney":
+            if not goapi_key:
+                logger.error("No GoAPI key provided. Midjourney image generation will fail.")
+                raise ValueError("GoAPI key required for Midjourney integration")
+                
+            logger.info("Successfully initialized Midjourney via GoAPI")
+            self.model = "midjourney"
+            self.size = size
+            
+        elif self.provider == "imagen":
+            if not google_key:
+                logger.error("No Google API key provided. Imagen image generation will fail.")
+                raise ValueError("Google API key required for Imagen integration")
+            
+            # Validate Google API key
+            is_valid, message = validate_api_key(google_key, "google")
+            if not is_valid:
+                logger.error(f"Invalid Google API key: {message}")
+                logger.error(f"API key starts with: '{google_key[:10]}...'")
+                raise ValueError(f"Invalid Google API key: {message}")
+            
+            try:
+                # Configure the Google AI client
+                genai.configure(api_key=google_key)
+                logger.info("Successfully initialized Google Imagen client")
+            except Exception as e:
+                logger.error(f"Failed to initialize Google Imagen client: {str(e)}")
+                raise
+            
+            self.model = "imagen" if model == "dall-e-3" else model
+            self.size = size
+            
+        elif self.provider == "hiveai":
+            if not self.hiveai_key:
+                logger.error("No HiveAI API key provided. HiveAI image generation will fail.")
+                raise ValueError("HiveAI API key required for HiveAI integration")
+            
+            # Validate HiveAI API key
+            is_valid, message = validate_api_key(self.hiveai_key, "hiveai")
+            if not is_valid:
+                logger.error(f"Invalid HiveAI API key: {message}")
+                logger.error(f"API key starts with: '{self.hiveai_key[:10]}...'")
+                raise ValueError(f"Invalid HiveAI API key: {message}")
+            
+            logger.info("Successfully initialized HiveAI client")
+            self.model = model
+            self.size = size
+            
+        else:
+            raise ValueError(f"Unsupported provider: {provider}. Use 'openai', 'midjourney', 'imagen', or 'hiveai'")
+
+    def _save_image(self, image_url, output_path):
+        """
+        Download and save an image from a URL.
+        
+        Args:
+            image_url: URL of the image to download
+            output_path: Path where the image will be saved
+            
+        Returns:
+            True if download was successful, False otherwise
+        """
+        try:
+            response = requests.get(image_url, stream=True)
+            if response.status_code == 200:
+                with open(output_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=1024):
+                        f.write(chunk)
+                return True
+            else:
+                logger.error(f"Failed to download image: {response.status_code}")
+                return False
+        except Exception as e:
+            logger.error(f"Error downloading image: {str(e)}")
+            return False
+    
+    def _save_b64_image(self, b64_json, output_path):
+        """
+        Save an image from base64 JSON data.
+        
+        Args:
+            b64_json: Base64 encoded image data
+            output_path: Path where the image will be saved
+            
+        Returns:
+            True if save was successful, False otherwise
+        """
+        try:
+            with open(output_path, 'wb') as f:
+                f.write(base64.b64decode(b64_json))
+            return True
+        except Exception as e:
+            logger.error(f"Error saving base64 image: {str(e)}")
+            return False
+    
+    def generate_image_from_prompt_midjourney(self, prompt, output_path):
+        """
+        Generate an image using Midjourney via GoAPI.
+        
+        Args:
+            prompt: The prompt to use for image generation
+            output_path: Path where the image will be saved
+            
+        Returns:
+            Path to the saved image or None if generation failed
+        """
+        try:
+            logger.info(f"Generating Midjourney image with prompt: {prompt[:100]}...")
+            
+            # GoAPI endpoint for Midjourney
+            url = "https://api.goapi.ai/api/v1/task"
+            
+            # Request headers
+            headers = {
+                "x-api-key": self.goapi_key,
+                "Content-Type": "application/json"
+            }
+            
+            # Request payload
+            payload = {
+                "model": "midjourney",
+                "task_type": "imagine",
+                "input": {
+                    "prompt": prompt,
+                    "aspect_ratio": self.aspect_ratio,
+                    "process_mode": "fast",  # Options: "relax", "fast", "turbo"
+                    "skip_prompt_check": False
+                }
+            }
+            
+            # Try up to 3 times to get a successful response
+            max_retries = 3
+            
+            for retry in range(max_retries):
+                try:
+                    # Send request to GoAPI
+                    response = requests.post(url, headers=headers, json=payload, timeout=60)
+                    
+                    if response.status_code == 200:
+                        break
+                    
+                    if retry < max_retries - 1:
+                        logger.warning(f"Retry {retry+1}/{max_retries}: Error from GoAPI: {response.status_code}, {response.text}")
+                        import time
+                        time.sleep(5)  # Wait 5 seconds before retrying
+                    else:
+                        logger.error(f"Error from GoAPI after {max_retries} attempts: {response.status_code}, {response.text}")
+                        return None
+                except requests.RequestException as e:
+                    if retry < max_retries - 1:
+                        logger.warning(f"Retry {retry+1}/{max_retries}: Network error: {str(e)}")
+                        import time
+                        time.sleep(5)  # Wait 5 seconds before retrying
+                    else:
+                        logger.error(f"Network error after {max_retries} attempts: {str(e)}")
+                        return None
+                    
+            response_data = response.json()
+            task_id = response_data.get("data", {}).get("task_id")
+            
+            if not task_id:
+                logger.error(f"No task ID returned from GoAPI: {response_data}")
+                return None
+                
+            logger.info(f"Midjourney task initiated with ID: {task_id}")
+            
+            # Poll for task completion
+            max_attempts = 60  # Increased from 30 to 60 for longer timeout
+            attempt = 0
+            poll_url = f"https://api.goapi.ai/api/v1/task/{task_id}"
+            
+            while attempt < max_attempts:
+                attempt += 1
+                logger.info(f"Checking Midjourney task status (attempt {attempt}/{max_attempts})...")
+                
+                # Wait between polling attempts (exponential backoff)
+                import time
+                wait_time = min(5 + (attempt // 5), 20)  # Start with 5s, increase to max 20s
+                time.sleep(wait_time)
+                
+                # Get task status with retries
+                status_response = None
+                for status_retry in range(3):
+                    try:
+                        status_response = requests.get(poll_url, headers={"x-api-key": self.goapi_key}, timeout=30)
+                        break
+                    except requests.RequestException:
+                        if status_retry < 2:
+                            time.sleep(3)
+                        else:
+                            logger.error("Failed to check task status after 3 retries")
+                            continue
+                
+                if not status_response or status_response.status_code != 200:
+                    error_text = status_response.text if status_response else "No response"
+                    logger.error(f"Error checking task status: {status_response.status_code if status_response else 'No response'}, {error_text}")
+                    continue
+                
+                status_data = status_response.json()
+                task_status = status_data.get("data", {}).get("status", "").lower()
+                
+                # If task completed
+                if task_status == "completed":
+                    # Get the image URL from the response
+                    output_data = status_data.get("data", {}).get("output", {})
+                    image_url = output_data.get("image_url")
+                    
+                    # Try all possible URL sources
+                    if not image_url:
+                        # Try getting from image_urls
+                        image_urls = output_data.get("image_urls")
+                        if image_urls and len(image_urls) > 0:
+                            image_url = image_urls[0]
+                    
+                    if not image_url:
+                        # Try discord image URL
+                        image_url = output_data.get("discord_image_url")
+                    
+                    if not image_url:
+                        # Try temporary image URLs
+                        temp_urls = output_data.get("temporary_image_urls")
+                        if temp_urls and len(temp_urls) > 0:
+                            image_url = temp_urls[0]
+                    
+                    # If we still don't have a URL but status is completed, wait a bit longer
+                    if not image_url:
+                        if attempt < max_attempts - 5:  # Give it 5 more tries
+                            logger.warning(f"Task marked as completed but no image URL found yet. Waiting...")
+                            time.sleep(10)  # Wait longer than usual
+                            continue
+                        else:
+                            logger.error(f"No image URL found in completed task after multiple attempts: {output_data}")
+                            return None
+                    
+                    # Create directory for image if it doesn't exist
+                    os.makedirs(os.path.dirname(output_path), exist_ok=True)
+                    
+                    # Save image with retries
+                    save_attempts = 3
+                    for save_retry in range(save_attempts):
+                        if self._save_image(image_url, output_path):
+                            logger.info(f"Saved Midjourney image to {output_path}")
+                            return output_path
+                        else:
+                            if save_retry < save_attempts - 1:
+                                logger.warning(f"Retry {save_retry+1}/{save_attempts}: Failed to save image, retrying...")
+                                time.sleep(3)
+                            else:
+                                logger.error(f"Failed to save Midjourney image to {output_path} after {save_attempts} attempts")
+                                return None
+                
+                # If task failed
+                elif task_status == "failed":
+                    error_msg = status_data.get("data", {}).get("error", {}).get("message", "Unknown error")
+                    logger.error(f"Midjourney task failed: {error_msg}")
+                    return None
+                
+                # Continue polling if still processing
+                logger.info(f"Midjourney task status: {task_status}")
+            
+            logger.error(f"Midjourney task timed out after {max_attempts} attempts")
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error generating Midjourney image: {str(e)}")
+            return None
+            
+    def generate_image_from_prompt_imagen(self, prompt, output_path):
+        """
+        Generate an image using Google's Imagen API via Gemini.
+        
+        Args:
+            prompt: The prompt to use for image generation
+            output_path: Path where the image will be saved
+            
+        Returns:
+            Path to the saved image or None if generation failed
+        """
+        try:
+            logger.info(f"Generating Google Imagen image with prompt: {prompt[:100]}...")
+            
+            # Parse size parameter for width and height for logging purposes
+            if "x" in self.size:
+                width, height = map(int, self.size.split("x"))
+                logger.info(f"Requested image size: {width}x{height} (note: Gemini may use its default size)")
+            
+            # Create the image generation model with Gemini
+            generation_config = {
+                "temperature": 0.8,
+                "top_p": 0.95,
+                "top_k": 40,
+            }
+            
+            # Use Gemini Pro model which has text-to-image capabilities
+            model = genai.GenerativeModel('gemini-1.5-pro', generation_config=generation_config)
+            
+            # Call the Gemini API
+            try:
+                # Generate the image description and URL
+                enhanced_prompt = f"Generate a photorealistic image of: {prompt}. The image should be high-resolution, with vivid colors and realistic details."
+                
+                response = model.generate_content(enhanced_prompt)
+                
+                if not response or not response.text:
+                    logger.error("No response returned from Google Gemini API")
+                    return None
+                
+                # Look for image URL in the response
+                image_url = None
+                text_content = response.text
+                
+                logger.info(f"Raw response from Gemini: {text_content[:200]}...")
+                
+                # Since direct image generation isn't supported, we'll need to use another method
+                # For now, let's save the text as a placeholder
+                
+                # Create directory for the output if it doesn't exist
+                os.makedirs(os.path.dirname(output_path), exist_ok=True)
+                
+                # Save the description as a text file
+                text_output_path = output_path.rsplit('.', 1)[0] + ".txt"
+                with open(text_output_path, 'w') as f:
+                    f.write(f"Prompt: {prompt}\n\n")
+                    f.write(f"Response from Gemini:\n{text_content}")
+                
+                logger.info(f"Saved Gemini response to {text_output_path}")
+                logger.warning("Direct image generation with Google Generative AI SDK is not supported. Saved text response instead.")
+                logger.warning("Consider using the Vertex AI API for image generation: https://cloud.google.com/vertex-ai/docs/generative-ai/image/generate-images")
+                
+                # For compatibility with the rest of the code, return the text file path
+                return text_output_path
+                
+            except Exception as e:
+                logger.error(f"Error during Google Gemini API call: {str(e)}")
+                raise
+                
+        except Exception as e:
+            logger.error(f"Error generating image with Google Gemini: {str(e)}")
+            return None
+
+    def generate_image_from_prompt_hiveai(self, prompt, output_path):
+        """
+        Generate an image using HiveAI's flux-schnell-enhanced model.
+        
+        Args:
+            prompt: The prompt to use for image generation
+            output_path: Path where the image will be saved
+            
+        Returns:
+            Path to the saved image or None if generation failed
+        """
+        try:
+            logger.info(f"Generating HiveAI image with prompt: {prompt[:100]}...")
+            
+            # Extract width and height from size parameter
+            if "x" in self.size:
+                width, height = map(int, self.size.split("x"))
+            else:
+                # Default to 768x1344 if size format is invalid
+                width, height = 768, 1344
+                logger.warning(f"Invalid size format: {self.size}, using default 768x1344")
+            
+            # HiveAI API endpoint for image generation
+            url = "https://api.thehive.ai/api/v2/inference"
+            
+            # Request headers
+            headers = {
+                "Authorization": f"Token {self.hiveai_key}",
+                "Content-Type": "application/json"
+            }
+            
+            # Request payload
+            payload = {
+                "model": {
+                    "name": self.model
+                },
+                "input": {
+                    "prompt": prompt,
+                    "width": width,
+                    "height": height,
+                    "num_images": self.num_images,
+                    "guidance_scale": 7.5,  # Default value
+                    "steps": 30  # Default value
+                }
+            }
+            
+            # Send request to HiveAI
+            response = requests.post(url, headers=headers, json=payload, timeout=120)
+            
+            if response.status_code != 200:
+                logger.error(f"Error from HiveAI API: {response.status_code}, {response.text}")
+                return None
+            
+            # Parse the response
+            response_data = response.json()
+            
+            # Check if generation was successful
+            status = response_data.get("status", "")
+            if status.lower() != "success":
+                logger.error(f"HiveAI generation failed: {response_data}")
+                return None
+            
+            # Get the list of image data
+            outputs = response_data.get("result", {}).get("output", [])
+            if not outputs:
+                logger.error("No images returned from HiveAI API")
+                return None
+            
+            # Create directory for image if it doesn't exist
+            os.makedirs(os.path.dirname(output_path), exist_ok=True)
+            
+            saved_images = []
+            
+            # Save all generated images
+            for i, output in enumerate(outputs):
+                image_url = output.get("url")
+                
+                if not image_url:
+                    logger.warning(f"Missing image URL in output {i+1}")
+                    continue
+                
+                # Create unique path for each image if more than one is generated
+                if i == 0:
+                    image_save_path = output_path
+                else:
+                    # Add index to filename for additional images
+                    base_name, ext = os.path.splitext(output_path)
+                    image_save_path = f"{base_name}_{i+1}{ext}"
+                
+                # Save image
+                if self._save_image(image_url, image_save_path):
+                    logger.info(f"Saved HiveAI image {i+1} to {image_save_path}")
+                    saved_images.append(image_save_path)
+                else:
+                    logger.error(f"Failed to save HiveAI image {i+1} to {image_save_path}")
+            
+            # Return the first saved image path or None if all failed
+            if saved_images:
+                return saved_images[0]
+            else:
+                return None
+            
+        except Exception as e:
+            logger.error(f"Error generating HiveAI image: {str(e)}")
+            return None
+
+    def generate_image_from_prompt(self, prompt, output_path):
+        """
+        Generate an image using the configured provider (OpenAI, Midjourney, Google Imagen, or HiveAI).
+        
+        Args:
+            prompt: The prompt to use for image generation
+            output_path: Path where the image will be saved
+            
+        Returns:
+            Path to the saved image or None if generation failed
+        """
+        if self.provider == "midjourney":
+            return self.generate_image_from_prompt_midjourney(prompt, output_path)
+        elif self.provider == "imagen":
+            return self.generate_image_from_prompt_imagen(prompt, output_path)
+        elif self.provider == "hiveai":
+            return self.generate_image_from_prompt_hiveai(prompt, output_path)
+        
+        # Default to OpenAI DALL-E
+        try:
+            logger.info(f"Generating OpenAI DALL-E image with prompt: {prompt[:100]}...")
+            
+            # Call OpenAI API to generate image
+            try:
+                response = self.client.images.generate(
+                    model=self.model,
+                    prompt=prompt,
+                    size=self.size,
+                    quality="hd",
+                    style="natural",
+                    n=1,
+                )
+                
+                # Get image URL from response
+                image_url = response.data[0].url
+                
+                # Create directory for image if it doesn't exist
+                os.makedirs(os.path.dirname(output_path), exist_ok=True)
+                
+                # Save image
+                if self._save_image(image_url, output_path):
+                    logger.info(f"Saved OpenAI DALL-E image to {output_path}")
+                    return output_path
+                else:
+                    logger.error(f"Failed to save OpenAI DALL-E image to {output_path}")
+                    return None
+            except Exception as e:
+                logger.error(f"Error during OpenAI API call: {str(e)}")
+                # Extract and log the API error details
+                error_str = str(e)
+                if "invalid_api_key" in error_str:
+                    logger.error("Invalid API key detected in error message")
+                    try:
+                        # Try to extract the key from the error message
+                        import re
+                        key_match = re.search(r"provided:\s+([^.]+)", error_str)
+                        if key_match:
+                            bad_key = key_match.group(1)
+                            logger.error(f"Bad API key detected: '{bad_key}'")
+                    except Exception:
+                        pass
+                raise
+            
+        except Exception as e:
+            logger.error(f"Error generating OpenAI DALL-E image: {str(e)}")
+            return None
+    
+    def generate_images_for_post(self, prompts, post_title, output_dir):
+        """
+        Generate images for a post using the provided prompts.
+        
+        Args:
+            prompts: List of prompts to use for image generation
+            post_title: The title of the post
+            output_dir: Directory to save the generated images
+            
+        Returns:
+            List of paths to the generated images
+        """
+        os.makedirs(output_dir, exist_ok=True)
+        
+        logger.info(f"Generating images for post: {post_title}")
+        
+        image_paths = []
+        
+        # For Midjourney provider, limit to 3 concurrent requests
+        if self.provider == "midjourney":
+            import concurrent.futures
+            import time
+            
+            with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+                futures = []
+                
+                for i, prompt in enumerate(prompts):
+                    # Create output path for this image
+                    image_filename = f"{i+1}_{post_title.replace(' ', '_')[:30]}.png"
+                    image_path = os.path.join(output_dir, image_filename)
+                    
+                    # Submit the task to the executor
+                    future = executor.submit(self.generate_image_from_prompt, prompt, image_path)
+                    futures.append((future, image_path))
+                
+                # Wait for all futures to complete
+                for future, image_path in futures:
+                    try:
+                        saved_path = future.result()
+                        if saved_path:
+                            image_paths.append(saved_path)
+                    except Exception as e:
+                        logger.error(f"Error in concurrent image generation: {str(e)}")
+                        
+            return image_paths
+        else:
+            # For other providers, use simple sequential processing
+            for i, prompt in enumerate(prompts):
+                # Create output path for this image
+                image_filename = f"{i+1}_{post_title.replace(' ', '_')[:30]}.png"
+                image_path = os.path.join(output_dir, image_filename)
+                
+                # Generate image
+                saved_path = self.generate_image_from_prompt(prompt, image_path)
+                
+                if saved_path:
+                    image_paths.append(saved_path)
+            
+            return image_paths
+    
+    def generate_images_from_prompts_dir(self, prompts_dir):
+        """
+        Generate images from prompt files in a directory.
+        
+        Args:
+            prompts_dir: Directory containing prompt files
+            
+        Returns:
+            Dictionary mapping post titles to lists of image paths
+        """
+        # When using the new structure, self.output_dir is already set to the correct images directory
+        images_dir = self.output_dir
+        
+        logger.info(f"Generating images from prompts in {prompts_dir}")
+        logger.info(f"Images will be saved to {images_dir}")
+        
+        # Create directory for images
+        os.makedirs(images_dir, exist_ok=True)
+        
+        # Check if there's a summary file
+        summary_path = os.path.join(prompts_dir, "summary.json")
+        post_dirs = []
+        
+        if os.path.exists(summary_path):
+            # Load summary file to get post titles and prompts
+            with open(summary_path, 'r') as f:
+                post_prompts = json.load(f)
+            
+            # Get list of post directories
+            post_dirs = [d for d in os.listdir(prompts_dir) 
+                       if os.path.isdir(os.path.join(prompts_dir, d)) and d != "__pycache__"]
+        else:
+            # No summary file, look for post directories directly
+            post_dirs = [d for d in os.listdir(prompts_dir) 
+                       if os.path.isdir(os.path.join(prompts_dir, d)) and d != "__pycache__"]
+        
+        image_paths = {}
+        
+        # Generate images for each post
+        for post_dir in post_dirs:
+            # Extract post title from directory name
+            post_title = post_dir.replace('_', ' ')
+            
+            # Get prompt files for this post
+            prompt_dir = os.path.join(prompts_dir, post_dir)
+            prompt_files = [f for f in os.listdir(prompt_dir) if f.endswith("_prompt.txt")]
+            
+            if not prompt_files:
+                logger.warning(f"No prompt files found for post: {post_title}")
+                continue
+            
+            # Load prompts from files
+            prompts = []
+            for prompt_file in sorted(prompt_files):
+                with open(os.path.join(prompt_dir, prompt_file), 'r') as f:
+                    prompts.append(f.read().strip())
+            
+            # Create directory for this post's images
+            post_images_dir = os.path.join(images_dir, post_dir)
+            
+            # Generate images
+            paths = self.generate_images_for_post(prompts, post_title, post_images_dir)
+            
+            if paths:
+                image_paths[post_title] = paths
+                logger.info(f"Generated {len(paths)} images for post: {post_title}")
+            else:
+                logger.warning(f"No images generated for post: {post_title}")
+        
+        # Save a summary file
+        summary_path = os.path.join(images_dir, "summary.json")
+        with open(summary_path, 'w') as f:
+            json.dump(image_paths, f, indent=2)
+        
+        logger.info(f"Image generation completed. Results saved to {images_dir}")
+        return image_paths
+    
+    def generate_images_from_posts_file(self, posts_file, prompts_dir=None):
+        """
+        Generate images for posts by first generating prompts if needed.
+        
+        Args:
+            posts_file: Path to the posts text file
+            prompts_dir: Directory containing prompt files (optional)
+            
+        Returns:
+            Dictionary mapping post titles to lists of image paths
+        """
+        from paddock_pulse.prompt_generator import PromptGenerator
+        
+        # If prompts directory not provided, try to find the prompts directory using the same timestamp
+        if not prompts_dir:
+            # Extract timestamp from directory structure
+            post_dir = os.path.dirname(posts_file)
+            timestamp_dir = os.path.dirname(post_dir)
+            
+            if os.path.basename(post_dir) == "posts" and os.path.basename(timestamp_dir) != "output":
+                # Using new structure - find the prompts directory with the same timestamp
+                prompts_dir = os.path.join(timestamp_dir, "prompts")
+                if not os.path.exists(prompts_dir):
+                    logger.info(f"Generating prompts for posts in {posts_file}")
+                    # Create a prompt generator that will save to the prompts subdirectory
+                    generator = PromptGenerator(output_dir=prompts_dir)
+                    generator.generate_prompts_for_posts_file(posts_file)
+            else:
+                # Using old structure or custom path - use default based on posts file
+                base_name = os.path.splitext(os.path.basename(posts_file))[0]
+                prompts_dir = os.path.join(self.output_dir, f"{base_name}_prompts")
+                
+                # Generate prompts if directory doesn't exist
+                if not os.path.exists(prompts_dir):
+                    logger.info(f"Generating prompts for posts in {posts_file}")
+                    generator = PromptGenerator(output_dir=self.output_dir)
+                    generator.generate_prompts_for_posts_file(posts_file)
+        
+        # Generate images from prompts
+        return self.generate_images_from_prompts_dir(prompts_dir)
+
+def main():
+    """Main function to generate images for the most recent prompts directory."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="Generate images for F1 social media posts using various image generation APIs")
+    parser.add_argument("--api-key", help="API key (overrides OPENAI_API_KEY or HIVEAI_API_KEY environment variable)")
+    parser.add_argument("--goapi-key", help="GoAPI key for Midjourney integration (overrides GOAPI_KEY environment variable)")
+    parser.add_argument("--google-key", help="Google API key for Imagen integration (overrides GOOGLE_API_KEY environment variable)")
+    parser.add_argument("--hiveai-key", help="HiveAI API key (overrides HIVEAI_API_KEY environment variable)")
+    parser.add_argument("--provider", default="hiveai", choices=["openai", "midjourney", "imagen", "hiveai"], help="Image generation provider (default: hiveai)")
+    parser.add_argument("--prompts-dir", help="Directory containing prompt files")
+    parser.add_argument("--posts-file", help="Path to the posts text file (if prompts don't exist yet)")
+    parser.add_argument("--output-dir", default="output", help="Directory to save images (default: output)")
+    parser.add_argument("--model", default="flux-schnell-enhanced", help="Model to use (default: flux-schnell-enhanced for HiveAI, dall-e-3 for OpenAI)")
+    parser.add_argument("--size", default="768x1344", help="Image size to generate (default: 768x1344)")
+    parser.add_argument("--aspect-ratio", default="1:1", help="Aspect ratio for Midjourney images (options: '1:1', '16:9', '4:3', etc.)")
+    parser.add_argument("--num-images", type=int, default=2, help="Number of images to generate per prompt (default: 2)")
+    args = parser.parse_args()
+    
+    # Get API keys from arguments or environment variables
+    api_key = args.api_key
+    goapi_key = args.goapi_key or os.environ.get("GOAPI_KEY")
+    google_key = args.google_key or os.environ.get("GOOGLE_API_KEY")
+    hiveai_key = args.hiveai_key or args.api_key or os.environ.get("HIVEAI_API_KEY") or "GUW7pxBW503hGHTsAD3yyypkNB4zxPhn"
+    
+    # For OpenAI, try environment variable if not provided
+    if args.provider == "openai" and not api_key:
+        api_key = os.environ.get("OPENAI_API_KEY")
+    
+    # Validate required API keys based on provider
+    if args.provider == "openai" and not api_key:
+        logger.error("No OpenAI API key provided. Please set OPENAI_API_KEY environment variable or use --api-key")
+        return 1
+    
+    if args.provider == "midjourney" and not goapi_key:
+        logger.error("No GoAPI key provided. Please set GOAPI_KEY environment variable or use --goapi-key")
+        return 1
+    
+    if args.provider == "imagen" and not google_key:
+        logger.error("No Google API key provided. Please set GOOGLE_API_KEY environment variable or use --google-key")
+        return 1
+    
+    if args.provider == "hiveai" and not hiveai_key:
+        logger.error("No HiveAI API key provided. Please set HIVEAI_API_KEY environment variable, use --hiveai-key, or use --api-key")
+        return 1
+    
+    # Initialize image generator
+    try:
+        # Set model based on provider if not specified
+        model = args.model
+        if args.provider == "openai" and model == "flux-schnell-enhanced":
+            model = "dall-e-3"
+        
+        generator = ImageGenerator(
+            api_key=api_key, 
+            output_dir=args.output_dir, 
+            model=model, 
+            size=args.size,
+            provider=args.provider,
+            goapi_key=goapi_key,
+            google_key=google_key,
+            hiveai_key=hiveai_key,
+            aspect_ratio=args.aspect_ratio,
+            num_images=args.num_images
+        )
+    except Exception as e:
+        logger.error(f"Failed to initialize image generator: {str(e)}")
+        return 1
+    
+    # Generate images
+    if args.prompts_dir:
+        # Generate images from existing prompts
+        generator.generate_images_from_prompts_dir(args.prompts_dir)
+    elif args.posts_file:
+        # Generate prompts and then images
+        generator.generate_images_from_posts_file(args.posts_file)
+    else:
+        # Find the most recent prompts directory
+        prompts_dirs = sorted([d for d in os.listdir(args.output_dir) 
+                            if os.path.isdir(os.path.join(args.output_dir, d)) and "prompts" in d], 
+                            reverse=True)
+        
+        if not prompts_dirs:
+            logger.error(f"No prompts directories found in {args.output_dir}. Please generate prompts first or specify a prompts directory using --prompts-dir")
+            return 1
+        
+        prompts_dir = os.path.join(args.output_dir, prompts_dirs[0])
+        logger.info(f"Using most recent prompts directory: {prompts_dir}")
+        
+        # Generate images
+        generator.generate_images_from_prompts_dir(prompts_dir)
+    
+    return 0
+
+if __name__ == "__main__":
+    import sys
+    sys.exit(main()) 
