@@ -9,6 +9,7 @@ import colorama
 from colorama import Fore, Style
 from paddock_pulse.prompt_generator import PromptGenerator
 from paddock_pulse.image_generator import ImageGenerator
+from paddock_pulse import config
 
 # Initialize colorama for colored terminal output
 colorama.init(autoreset=True)
@@ -32,7 +33,7 @@ def main():
     """Generate images for a sample post"""
     parser = argparse.ArgumentParser(description="Generate images for a sample F1 post using OpenAI DALL-E")
     parser.add_argument("--api-key", required=True, help="OpenAI API key")
-    parser.add_argument("--model", default="dall-e-3", help="OpenAI model to use (default: dall-e-3)")
+    parser.add_argument("--model", default=config.IMAGE_MODEL, help=f"OpenAI model to use (default: {config.IMAGE_MODEL})")
     parser.add_argument("--size", default="1024x1024", help="Image size to generate (default: 1024x1024)")
     args = parser.parse_args()
     

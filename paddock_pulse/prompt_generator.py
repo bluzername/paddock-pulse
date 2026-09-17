@@ -10,6 +10,7 @@ import re
 import logging
 import json
 import requests
+from paddock_pulse import config
 from pathlib import Path
 import colorama
 from colorama import Fore, Style
@@ -49,21 +50,21 @@ class OpenRouterPromptGenerator:
     This simplified approach leverages LLMs to create prompts directly from event details.
     """
     
-    def __init__(self, api_key=None, output_dir='output', model="meta-llama/llama-4-maverick"):
+    def __init__(self, api_key=None, output_dir='output', model=None):
         """
         Initialize the OpenRouterPromptGenerator.
         
         Args:
             api_key: OpenRouter API key (defaults to environment variable)
             output_dir: Directory where prompts will be stored
-            model: The LLM model to use for prompt generation
+            model: The LLM model to use for prompt generation (default: config.PROMPT_MODEL)
         """
         self.api_key = api_key or os.environ.get('OPENROUTER_API_KEY')
         if not self.api_key:
             logger.warning("No OpenRouter API key provided. Please set OPENROUTER_API_KEY environment variable.")
         
         self.output_dir = output_dir
-        self.model = model
+        self.model = model or config.PROMPT_MODEL
         os.makedirs(output_dir, exist_ok=True)
         logger.info(f"OpenRouterPromptGenerator initialized with save directory: {output_dir}")
     
@@ -407,7 +408,7 @@ def main():
     parser.add_argument("--posts-file", help="Path to the posts text file")
     parser.add_argument("--output-dir", default="output", help="Directory to save prompts (default: output)")
     parser.add_argument("--api-key", help="OpenRouter API key (overrides OPENROUTER_API_KEY environment variable)")
-    parser.add_argument("--model", default="meta-llama/llama-4-maverick", help="Model to use for prompt generation")
+    parser.add_argument("--model", default=config.PROMPT_MODEL, help=f"Model to use for prompt generation (default: {config.PROMPT_MODEL})")
     parser.add_argument("--use-legacy", action="store_true", help="Use legacy rule-based generator instead of OpenRouter API")
     parser.add_argument("--technical", action="store_true", help="Generate technical data visualization prompts")
     args = parser.parse_args()

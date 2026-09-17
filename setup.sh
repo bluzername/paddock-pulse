@@ -24,7 +24,7 @@ pip install -r requirements.txt
 # Check if .env file exists, if not create from example
 if [ ! -f ".env" ]; then
     echo "Creating .env file from example..."
-    cp example.env .env
+    cp .env.example .env
     echo "Please edit .env file to add your API keys."
 fi
 

@@ -10,6 +10,7 @@ import sys
 import json
 import logging
 import requests
+from paddock_pulse import config
 from pathlib import Path
 import colorama
 from colorama import Fore, Style
@@ -87,7 +88,7 @@ class VoiceoverGenerator:
         }
         
         # Model optimized for sports commentary
-        self.model_id = "eleven_turbo_v2"
+        self.model_id = config.TTS_MODEL
     
     def _clean_text_for_voiceover(self, text):
         """

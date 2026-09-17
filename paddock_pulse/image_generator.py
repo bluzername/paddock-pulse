@@ -36,6 +36,7 @@ from tenacity import (
 )
 import google.generativeai as genai
 from paddock_pulse.prompt_generator import OpenRouterPromptGenerator
+from paddock_pulse import config
 
 # Initialize colorama for colored terminal output
 colorama.init(autoreset=True)
@@ -131,7 +132,7 @@ class ImageGenerator:
     HiveAI's Flux Schnell Enhanced model for F1 social media posts.
     """
     
-    def __init__(self, api_key=None, output_dir='output', model="gpt-image-1", size="1024x1536", 
+    def __init__(self, api_key=None, output_dir='output', model=None, size="1024x1536", 
                  provider="openai", goapi_key=None, google_key=None, hiveai_key=None, aspect_ratio="16:9", 
                  num_images=2, quality="standard", style="vivid"):
         """
@@ -140,7 +141,7 @@ class ImageGenerator:
         Args:
             api_key: API key (used if provider-specific key not provided)
             output_dir: Directory where images will be stored
-            model: Model to use (default: 'gpt-image-1' for OpenAI)
+            model: Model to use (default: config.IMAGE_MODEL for OpenAI)
             size: Image size to generate (default: 1024x1536 for OpenAI)
             provider: Image generation provider ('openai', 'hiveai', 'midjourney', or 'imagen')
             goapi_key: GoAPI API key (used if provider is 'midjourney')
@@ -153,9 +154,10 @@ class ImageGenerator:
         """
         self.output_dir = output_dir
         self.provider = provider.lower()
+        model = model or config.IMAGE_MODEL
         self.goapi_key = goapi_key
         self.google_key = google_key
-        self.hiveai_key = hiveai_key or api_key or "GUW7pxBW503hGHTsAD3yyypkNB4zxPhn"  # Use the main api_key if hiveai_key not provided
+        self.hiveai_key = hiveai_key or os.environ.get("HIVEAI_API_KEY")
         self.aspect_ratio = aspect_ratio
         self.num_images = num_images
         self.quality = quality
@@ -256,8 +258,8 @@ class ImageGenerator:
                 else:
                     self.hiveai_model = "sdxl-enhanced"
             else:
-                # Default to flux-schnell-enhanced if model not recognized
-                self.hiveai_model = "flux-schnell-enhanced"
+                # Default to config.HIVEAI_MODEL if model not recognized
+                self.hiveai_model = config.HIVEAI_MODEL
                 
             logger.info(f"Using HiveAI model: {self.hiveai_model}")
             self.model = model
@@ -408,7 +410,7 @@ class ImageGenerator:
                     
                     # Try with DALL-E 3 as fallback
                     original_model = self.model
-                    self.model = "dall-e-3"
+                    self.model = config.IMAGE_FALLBACK_MODEL
                     result = self.generate_image_from_prompt_openai(prompt, output_path)
                     self.model = original_model
                     return result
@@ -428,7 +430,7 @@ class ImageGenerator:
                     # Fall back to DALL-E
                     logger.info("Authentication error with GPT-Image-1. Falling back to DALL-E 3...")
                     original_model = self.model
-                    self.model = "dall-e-3"
+                    self.model = config.IMAGE_FALLBACK_MODEL
                     result = self.generate_image_from_prompt_openai(prompt, output_path)
                     self.model = original_model
                     return result
@@ -468,7 +470,7 @@ class ImageGenerator:
             # All retries exhausted
             logger.error("All retry attempts failed for GPT-Image-1. Falling back to DALL-E 3...")
             original_model = self.model
-            self.model = "dall-e-3"
+            self.model = config.IMAGE_FALLBACK_MODEL
             result = self.generate_image_from_prompt_openai(prompt, output_path)
             self.model = original_model
             return result
@@ -479,7 +481,7 @@ class ImageGenerator:
             # Fall back to DALL-E 3
             logger.info("Falling back to DALL-E 3...")
             original_model = self.model
-            self.model = "dall-e-3"
+            self.model = config.IMAGE_FALLBACK_MODEL
             result = self.generate_image_from_prompt_openai(prompt, output_path)
             self.model = original_model
             return result
@@ -502,7 +504,7 @@ class ImageGenerator:
             if skip_gpt_image_1 and self.model == "gpt-image-1":
                 logger.info("Skipping GPT-Image-1 attempt as SKIP_GPT_IMAGE_1 is set. Using DALL-E 3 instead.")
                 original_model = self.model
-                self.model = "dall-e-3" 
+                self.model = config.IMAGE_FALLBACK_MODEL
                 result = self.generate_image_from_prompt_openai(prompt, output_path)
                 self.model = original_model
                 return result
@@ -556,7 +558,7 @@ class ImageGenerator:
             # For all other OpenAI models or if GPT-Image-1 should be skipped
             if self.model == "gpt-image-1" and skip_gpt_image_1:
                 logger.info("Skipping GPT-Image-1 as requested by environment variable. Using DALL-E 3 instead.")
-                model = "dall-e-3"
+                model = config.IMAGE_FALLBACK_MODEL
             else:
                 model = self.model
                 
@@ -1208,7 +1210,7 @@ class ImageGenerator:
             
             # Build the API URL
             # Documentation: https://ai.google.dev/gemini-api/docs/image-generation
-            base_url = "https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict"
+            base_url = f"https://generativelanguage.googleapis.com/v1beta/models/{config.IMAGEN_MODEL}:predict"
             
             # Set up the request headers
             headers = {
@@ -1635,7 +1637,7 @@ def main():
     parser.add_argument("--prompts-dir", help="Directory containing prompt files")
     parser.add_argument("--posts-file", help="Path to the posts text file (if prompts don't exist yet)")
     parser.add_argument("--output-dir", default="output", help="Directory to save images (default: output)")
-    parser.add_argument("--model", default="gpt-image-1", help="Model to use (default: gpt-image-1 for OpenAI, but will fall back to DALL-E 3 if not available)")
+    parser.add_argument("--model", default=config.IMAGE_MODEL, help=f"Model to use (default: {config.IMAGE_MODEL}; gpt-image-1 falls back to {config.IMAGE_FALLBACK_MODEL} if unavailable)")
     parser.add_argument("--size", default="1024x1024", help="Image size to generate (default: 1024x1024, use 1024x1536 for GPT-Image-1)")
     parser.add_argument("--aspect-ratio", default="16:9", help="Aspect ratio for images (options: '16:9', '1:1', '4:3', etc.)")
     parser.add_argument("--num-images", type=int, default=2, help="Number of images to generate per prompt (default: 2)")
@@ -1647,7 +1649,7 @@ def main():
     api_key = args.api_key
     goapi_key = args.goapi_key or os.environ.get("GOAPI_KEY")
     google_key = args.google_key or os.environ.get("GOOGLE_API_KEY")
-    hiveai_key = args.hiveai_key or args.api_key or os.environ.get("HIVEAI_API_KEY") or "GUW7pxBW503hGHTsAD3yyypkNB4zxPhn"
+    hiveai_key = args.hiveai_key or os.environ.get("HIVEAI_API_KEY") or (args.api_key if args.provider == "hiveai" else None)
     
     # For OpenAI, try environment variable if not provided
     if args.provider == "openai" and not api_key:
@@ -1675,10 +1677,10 @@ def main():
         # Set model based on provider if not specified
         model = args.model
         if args.provider == "openai" and not model:
-            model = "gpt-image-1"
+            model = config.IMAGE_MODEL
             logger.info("Using GPT-Image-1 by default. Note that if your account doesn't have access to GPT-Image-1, it will automatically fall back to DALL-E 3.")
-        elif args.provider == "hiveai" and model == "gpt-image-1":
-            model = "flux-schnell-enhanced"
+        elif args.provider == "hiveai" and model == config.IMAGE_MODEL:
+            model = config.HIVEAI_MODEL
         
         # Check if size is appropriate for the model
         size = args.size
