@@ -133,7 +133,8 @@ CI (`.github/workflows/ci.yml`) runs exactly those two checks on Python 3.11.
 There is no automated test suite. Dependabot watches pip and GitHub Actions weekly.
 
 A `Dockerfile` is included (`docker build -t paddockpulse .` then
-`docker run --env-file .env paddockpulse posts`). It is not built in CI.
+`docker run --env-file .env paddockpulse posts`). It builds against the current
+layout but is not built in CI.
 
 ## Known limitations
 
