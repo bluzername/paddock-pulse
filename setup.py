@@ -34,7 +34,6 @@ setup(
     entry_points={
         "console_scripts": [
             "paddockpulse=paddock_pulse.main:main",
-            "paddockpulse-init-db=paddock_pulse.scripts.init_db:main",
         ],
     },
 ) 

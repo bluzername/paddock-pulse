@@ -1,57 +1,36 @@
-.PHONY: setup install clean test run-images check-api
+.PHONY: setup install lint clean run-images debug-keys help
 
-# Setup everything
+# Create a virtualenv, install dependencies and copy .env.example to .env
 setup:
 	./setup.sh
 
-# Install dependencies only
+# Install runtime dependencies into the active environment
 install:
 	pip install -r requirements.txt
 
-# Clean generated files
+# Same checks as CI: ruff (undefined names, syntax) plus byte-compilation
+lint:
+	ruff check .
+	python -m compileall -q .
+
+# Remove generated posts and images
 clean:
 	rm -rf output/f1_posts_*
 	rm -f test_image.png
 
-# Run quick test of OpenAI integration
-test:
-	@echo "Running simple OpenAI DALL-E test..."
-	@echo "Please provide your OpenAI API key when prompted."
-	@read -p "OpenAI API key: " key; \
-	export OPENAI_API_KEY="$$key"; \
-	python simple_test.py --api-key "$$key"
-
-# Generate images for existing prompts
+# Generate images for the most recent prompts (needs OPENAI_API_KEY in .env or the environment)
 run-images:
-	@echo "Running image generation with OpenAI DALL-E..."
-	@echo "Please provide your OpenAI API key when prompted."
-	@read -p "OpenAI API key: " key; \
-	export OPENAI_API_KEY="$$key"; \
 	python run_all.py images
 
-# Check OpenAI API key
-check-api:
-	@echo "Checking OpenAI API key..."
-	@echo "Please provide your OpenAI API key when prompted."
-	@read -p "OpenAI API key: " key; \
-	export OPENAI_API_KEY="$$key"; \
-	python check_openai_api.py
-
-# Check using key-debug mode
+# Print masked API key diagnostics
 debug-keys:
-	@echo "Running key debug mode..."
-	@echo "Please provide your OpenAI API key when prompted."
-	@read -p "OpenAI API key: " key; \
-	export OPENAI_API_KEY="$$key"; \
 	python run_all.py --key-debug
 
-# Help
 help:
 	@echo "Available commands:"
-	@echo "  make setup      - Set up the project (create venv, install dependencies)"
+	@echo "  make setup      - Create venv, install dependencies, create .env"
 	@echo "  make install    - Install dependencies only"
+	@echo "  make lint       - Run ruff check and python -m compileall (same as CI)"
 	@echo "  make clean      - Remove generated files"
-	@echo "  make test       - Run a simple test of OpenAI DALL-E"
 	@echo "  make run-images - Generate images for existing prompts"
-	@echo "  make check-api  - Check if OpenAI API key is valid"
-	@echo "  make debug-keys - Debug API key issues" 
+	@echo "  make debug-keys - Print masked API key diagnostics"

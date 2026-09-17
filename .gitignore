@@ -22,6 +22,7 @@ wheels/
 
 # Virtual Environment
 venv/
+.venv/
 env/
 ENV/
 
@@ -57,6 +58,8 @@ coverage.xml
 
 # Local development settings
 local_settings.py
+*.bak
+.ruff_cache/
 
 # Database
 *.db
@@ -89,6 +92,9 @@ local_settings.py
 
 # F1/AI specific output directories
 output/
+example_output/
+test_batch/
+test_hiveai/
 test_output*/
 examples/output/
 cache/

@@ -1,31 +1,19 @@
-# Use Python 3.11 slim image
 FROM python:3.11-slim
 
-# Set working directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    build-essential \
-    libpq-dev \
+# ffmpeg is needed by moviepy and openai-whisper (image_concat.py)
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
 COPY . .
 
-# Create necessary directories
-RUN mkdir -p /app/media /app/logs
-
-# Set environment variables
 ENV PYTHONPATH=/app
 ENV PYTHONUNBUFFERED=1
 
-# Expose port
-EXPOSE 8000
-
-# Run the application
-CMD ["python", "run.py"] 
+# API keys are passed at run time, e.g. docker run --env-file .env paddockpulse posts
+ENTRYPOINT ["python", "run_all.py"]
+CMD ["--help"]
