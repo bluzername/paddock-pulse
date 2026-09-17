@@ -11,7 +11,7 @@ install:
 # Same checks as CI: ruff (undefined names, syntax) plus byte-compilation
 lint:
 	ruff check .
-	python -m compileall -q .
+	python -m compileall -q -x '(\.venv|build|dist)/' .
 
 # Remove generated posts and images
 clean:

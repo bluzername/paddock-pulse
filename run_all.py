@@ -455,7 +455,6 @@ def run_image_generation(api_key, output_dir, model=None, size="1024x1024", prov
             model = config.IMAGE_MODEL
         
         # Set environment variable to skip GPT-Image-1 if requested
-        skip_gpt_image_1 = getattr(args, 'skip_gpt_image_1', False)
         if skip_gpt_image_1:
             os.environ["SKIP_GPT_IMAGE_1"] = "true"
             logger.info("Setting SKIP_GPT_IMAGE_1=true to use DALL-E 3 instead of GPT-Image-1")
