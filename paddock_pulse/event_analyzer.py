@@ -24,7 +24,7 @@ class F1EventAnalyzer:
     Class to analyze F1 data using LLM to identify interesting events.
     """
     
-    def __init__(self, api_key="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", save_dir='data'):
+    def __init__(self, api_key=None, save_dir='data'):
         """
         Initialize the F1EventAnalyzer.
         
@@ -34,7 +34,10 @@ class F1EventAnalyzer:
         """
         self.api_key = api_key or os.environ.get('OPENROUTER_API_KEY')
         if not self.api_key:
-            logger.warning("No OpenRouter API key provided. Please set OPENROUTER_API_KEY environment variable.")
+            raise ValueError(
+                "No OpenRouter API key provided. Set the OPENROUTER_API_KEY environment variable "
+                "or pass api_key explicitly."
+            )
         
         self.save_dir = save_dir
         os.makedirs(save_dir, exist_ok=True)

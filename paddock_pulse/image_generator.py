@@ -155,7 +155,7 @@ class ImageGenerator:
         self.provider = provider.lower()
         self.goapi_key = goapi_key
         self.google_key = google_key
-        self.hiveai_key = hiveai_key or api_key or "GUW7pxBW503hGHTsAD3yyypkNB4zxPhn"  # Use the main api_key if hiveai_key not provided
+        self.hiveai_key = hiveai_key or os.environ.get("HIVEAI_API_KEY")
         self.aspect_ratio = aspect_ratio
         self.num_images = num_images
         self.quality = quality
@@ -1647,7 +1647,7 @@ def main():
     api_key = args.api_key
     goapi_key = args.goapi_key or os.environ.get("GOAPI_KEY")
     google_key = args.google_key or os.environ.get("GOOGLE_API_KEY")
-    hiveai_key = args.hiveai_key or args.api_key or os.environ.get("HIVEAI_API_KEY") or "GUW7pxBW503hGHTsAD3yyypkNB4zxPhn"
+    hiveai_key = args.hiveai_key or os.environ.get("HIVEAI_API_KEY") or (args.api_key if args.provider == "hiveai" else None)
     
     # For OpenAI, try environment variable if not provided
     if args.provider == "openai" and not api_key:

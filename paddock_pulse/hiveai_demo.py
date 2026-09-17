@@ -18,8 +18,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger("hiveai_demo")
 
-# HiveAI API Key
-HIVEAI_API_KEY = "GUW7pxBW503hGHTsAD3yyypkNB4zxPhn"
+# HiveAI API key is read from the environment; never hardcode it here.
+HIVEAI_API_KEY = os.environ.get("HIVEAI_API_KEY")
 HIVEAI_MODEL = "hive/flux-schnell-enhanced"  # Updated model name with vendor
 
 def generate_image_with_hiveai(prompt, output_path, width=768, height=1344, num_images=2):
@@ -36,6 +36,9 @@ def generate_image_with_hiveai(prompt, output_path, width=768, height=1344, num_
     Returns:
         List of paths to the saved images or empty list if generation failed
     """
+    if not HIVEAI_API_KEY:
+        raise ValueError("HIVEAI_API_KEY environment variable is not set")
+
     logger.info(f"Generating HiveAI image with prompt: {prompt[:100]}...")
     
     # Create directory for image if it doesn't exist
@@ -153,6 +156,10 @@ def generate_image_with_hiveai(prompt, output_path, width=768, height=1344, num_
 
 def main():
     """Main function demonstrating HiveAI image generation."""
+    if not HIVEAI_API_KEY:
+        logger.error("HIVEAI_API_KEY environment variable is not set. Export it and rerun.")
+        return 1
+
     # Create output directory
     output_dir = os.path.join("output", "hiveai_demo")
     os.makedirs(output_dir, exist_ok=True)

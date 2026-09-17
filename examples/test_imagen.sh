@@ -6,8 +6,11 @@ echo "Google's Generative AI SDK doesn't currently support direct image generati
 echo "The script will generate and save a descriptive text response from Gemini instead."
 echo ""
 
-# Set your API key here or use the --api-key flag
-export GOOGLE_API_KEY="AIzaSyD7z7RU0y5i3QfpURJkocyktqgXSviXjMM"
+# The API key is read from the GOOGLE_API_KEY environment variable (or pass --api-key).
+if [ -z "$GOOGLE_API_KEY" ]; then
+  echo "GOOGLE_API_KEY is not set. Export it and rerun." >&2
+  exit 1
+fi
 
 # Create output directory
 mkdir -p output/imagen_test
