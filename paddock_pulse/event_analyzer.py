@@ -9,6 +9,7 @@ import os
 import logging
 import json
 import requests
+from paddock_pulse import config
 from datetime import datetime
 import time
 
@@ -242,7 +243,7 @@ Format your response as a JSON array with the following structure:
         }
         
         data = {
-            "model": "meta-llama/llama-4-maverick",
+            "model": config.ANALYSIS_MODEL,
             "messages": [
                 {"role": "user", "content": prompt}
             ],

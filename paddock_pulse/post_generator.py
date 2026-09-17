@@ -9,6 +9,7 @@ import os
 import logging
 import json
 import requests
+from paddock_pulse import config
 from datetime import datetime
 
 # Set up logging
@@ -247,7 +248,7 @@ Do not include any other text or explanations."""
         }
         
         data = {
-            "model": "openai/gpt-4o",  # Using GPT 4o for content generation
+            "model": config.TEXT_MODEL,
             "messages": [
                 {"role": "user", "content": prompt}
             ],
@@ -483,7 +484,7 @@ Format your response as a JSON array with the following structure:
         }
         
         data = {
-            "model": "openai/gpt-4o",
+            "model": config.TEXT_MODEL,
             "messages": [
                 {"role": "user", "content": prompt}
             ],
@@ -598,7 +599,7 @@ Do not include any other text or explanations."""
         }
         
         data = {
-            "model": "openai/gpt-4o",
+            "model": config.TEXT_MODEL,
             "messages": [
                 {"role": "user", "content": prompt}
             ],

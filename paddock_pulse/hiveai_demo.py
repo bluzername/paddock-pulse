@@ -10,6 +10,7 @@ import requests
 import json
 import logging
 from pathlib import Path
+from paddock_pulse import config
 
 # Setup basic logging
 logging.basicConfig(
@@ -20,7 +21,7 @@ logger = logging.getLogger("hiveai_demo")
 
 # HiveAI API key is read from the environment; never hardcode it here.
 HIVEAI_API_KEY = os.environ.get("HIVEAI_API_KEY")
-HIVEAI_MODEL = "hive/flux-schnell-enhanced"  # Updated model name with vendor
+HIVEAI_MODEL = "hive/" + config.HIVEAI_MODEL  # HiveAI expects the vendor prefix
 
 def generate_image_with_hiveai(prompt, output_path, width=768, height=1344, num_images=2):
     """

@@ -18,6 +18,7 @@ from datetime import datetime
 import colorama
 from colorama import Fore, Style
 import json
+from paddock_pulse import config
 
 # Initialize colorama for colored terminal output
 colorama.init(autoreset=True)
@@ -336,7 +337,7 @@ def run_image_prompt_generation(api_key, output_dir):
         logger.error(f"Error generating prompts for F1-101 content: {str(e)}")
         return False
 
-def run_image_generation(api_key, output_dir, model="dall-e-3", size="1024x1024", provider="openai", aspect_ratio="16:9", skip_gpt_image_1=False, quality="standard", style="vivid"):
+def run_image_generation(api_key, output_dir, model=None, size="1024x1024", provider="openai", aspect_ratio="16:9", skip_gpt_image_1=False, quality="standard", style="vivid"):
     """
     Generate images for F1-101 educational content.
     
@@ -448,9 +449,10 @@ def run_image_generation(api_key, output_dir, model="dall-e-3", size="1024x1024"
         else:
             actual_api_key = api_key
         
-        # If provider is imagen, use imagen-3.0-generate-002 model
         if provider == 'imagen':
-            model = 'imagen-3.0-generate-002'
+            model = config.IMAGEN_MODEL
+        elif not model:
+            model = config.IMAGE_MODEL
         
         # Set environment variable to skip GPT-Image-1 if requested
         skip_gpt_image_1 = getattr(args, 'skip_gpt_image_1', False)
@@ -772,7 +774,7 @@ def main():
     # Parser for image generation mode
     images_parser = subparsers.add_parser("images", help="Generate images from prompts")
     images_parser.add_argument('--posts-file', help='Path to the posts file')
-    images_parser.add_argument('--model', default='dall-e-3', help='Image generation model')
+    images_parser.add_argument('--model', default=config.IMAGE_MODEL, help=f'Image generation model (default: {config.IMAGE_MODEL})')
     images_parser.add_argument('--size', default='1024x1024', help='Image size')
     images_parser.add_argument('--provider', default='openai', help='Image generation provider (openai, midjourney, imagen)')
     images_parser.add_argument('--aspect-ratio', default='16:9', help='Aspect ratio for the images')
@@ -900,8 +902,8 @@ def main():
     )
     full_with_images_parser.add_argument(
         "--model",
-        default="dall-e-3",
-        help="OpenAI model to use (default: dall-e-3) or 'midjourney' for Midjourney"
+        default=config.IMAGE_MODEL,
+        help=f"OpenAI model to use (default: {config.IMAGE_MODEL}) or 'midjourney' for Midjourney"
     )
     full_with_images_parser.add_argument(
         "--size",
@@ -975,8 +977,8 @@ def main():
     )
     full_complete_parser.add_argument(
         "--model",
-        default="dall-e-3",
-        help="OpenAI model to use (default: dall-e-3) or 'midjourney' for Midjourney"
+        default=config.IMAGE_MODEL,
+        help=f"OpenAI model to use (default: {config.IMAGE_MODEL}) or 'midjourney' for Midjourney"
     )
     full_complete_parser.add_argument(
         "--size",
@@ -1079,8 +1081,8 @@ def main():
     )
     f1_101_parser.add_argument(
         "--model",
-        default="dall-e-3",
-        help="Image generation model to use (default: dall-e-3)"
+        default=config.IMAGE_MODEL,
+        help=f"Image generation model to use (default: {config.IMAGE_MODEL})"
     )
     f1_101_parser.add_argument(
         "--size",
@@ -1358,7 +1360,7 @@ def main():
             images_output_dir = output_structure["images_dir"] if 'output_structure' in generated_files else args.output_dir
             
             # Get model and size parameters
-            model = getattr(args, 'model', 'dall-e-3')
+            model = getattr(args, 'model', config.IMAGE_MODEL)
             size = getattr(args, 'size', '1024x1024')
             aspect_ratio = getattr(args, 'aspect_ratio', '16:9')
             quality = getattr(args, 'quality', 'standard')
@@ -1368,9 +1370,8 @@ def main():
             if provider == 'midjourney':
                 model = 'midjourney'
             
-            # If provider is imagen, use imagen-3.0-generate-002 model
             elif provider == 'imagen':
-                model = 'imagen-3.0-generate-002'
+                model = config.IMAGEN_MODEL
             
             # Set environment variable to skip GPT-Image-1 if requested
             skip_gpt_image_1 = getattr(args, 'skip_gpt_image_1', False)
