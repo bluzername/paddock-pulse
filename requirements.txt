@@ -17,6 +17,6 @@ google-generativeai>=0.8.0
 colorama>=0.4.6
 
 # Image and video processing (image_concat.py, scripts/background_coloring.py)
-pillow>=10.0.0
+pillow>=12.3.0
 moviepy>=1.0.3,<2.0
 openai-whisper>=20231117
