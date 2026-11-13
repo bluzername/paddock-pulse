@@ -1,5 +1,5 @@
 # F1 data
-fastf1>=3.9.1
+fastf1>=3.9.2
 pandas>=2.0.0
 numpy>=2.4.6
 
