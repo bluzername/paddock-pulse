@@ -4,6 +4,13 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    ignore:
+      # fastf1 3.x cannot resolve with pandas 3 (pip ResolutionImpossible, 2026-11-16)
+      - dependency-name: "pandas"
+        update-types: ["version-update:semver-major"]
+      # image_concat.py uses the moviepy 1.x API (moviepy.editor, set_*, fadein); v2 needs a full port
+      - dependency-name: "moviepy"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
